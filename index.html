@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>PUBG Contador - Estatísticas</title>
+<style>
+* { box-sizing: border-box; }
+body {
+  margin: 0; font-family: "Segoe UI", sans-serif;
+  background-color: #121212; color: #fff;
+  display: flex; justify-content: center; align-items: flex-start;
+  min-height: 100vh; padding: 20px 0;
+}
+.container {
+  background-color: #1e1e1e; padding: 25px 30px;
+  border-radius: 15px; text-align: center; width: 700px;
+  max-width: 95%; box-shadow: 0 0 25px #000;
+  display: none;
+}
+h1 { color: #ffeb3b; font-family: Impact, sans-serif; }
+p { margin: 10px 0; }
+input[type=text], select {
+  width: 80%; padding: 12px; margin: 10px 0;
+  border-radius: 8px; border: none;
+  background-color: #121212; color: #ffffff; font-size: 14px;
+}
+.button {
+  display: inline-block; background: linear-gradient(45deg, #ffeb3b, #ffc107);
+  color: #121212; font-weight: bold; padding: 15px 30px;
+  margin: 20px 0; border-radius: 15px; cursor: pointer;
+  transition: 0.2s; user-select: none; box-shadow: 0 0 20px rgba(255,235,59,0.6);
+}
+.button:hover { background: linear-gradient(45deg, #ffc107, #ffeb3b); box-shadow: 0 0 30px rgba(255,235,59,0.9);}
+.button:active { transform: translateY(2px); box-shadow: 0 0 15px rgba(255,235,59,0.6); }
+
+#resultContainer { margin-top: 20px; text-align: center; }
+
+/* BARRA DE CARREGAMENTO */
+#loadingBarContainer {
+  width: 80%; height: 25px; border-radius: 12px;
+  background: #2c2c2c; margin: 20px auto 0;
+  overflow: hidden; display:none;
+}
+#loadingBar {
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, #ffeb3b, #ffc107);
+  transition: width 0.2s;
+  text-align: center; color: #121212; font-weight: bold; line-height: 25px;
+}
+</style>
+</head>
+<body>
+
+<!-- 1. TELA DE BOAS-VINDAS -->
+<div class="container" id="welcomeScreen" style="display:block;">
+  <h1>🔥 PUBG Contador 🔥</h1>
+  <p>Bem-vindo! Clique no botão abaixo para começar a monitorar suas estatísticas.</p>
+  <div class="button" id="enterBtn">Entrar no PUBG Contador</div>
+  <div id="loadingBarContainer"><div id="loadingBar">0%</div></div>
+</div>
+
+<!-- 2. TELA DE PERSONAGEM -->
+<div class="container" id="playerScreen">
+  <h1>🔍 Buscar Estatísticas</h1>
+  <input type="text" id="nickname" placeholder="Digite seu Nickname">
+  <div class="button" id="viewBtn">Ver Estatísticas</div>
+</div>
+
+<!-- 3. TELA DE RESULTADOS -->
+<div class="container" id="resultScreen">
+  <div id="resultContainer"></div>
+  <div class="button" id="backBtn">Voltar</div>
+</div>
+
+<script>
+const BACKEND_URL = "https://pubg-backend.onrender.com"; // Troque pela sua URL do Render
+
+async function fetchStats(nick){
+  const res = await fetch(`${BACKEND_URL}/stats/${nick}`);
+  if(!res.ok) throw new Error("Erro ao buscar dados");
+  return res.json();
+}
+
+function displayStats(nick, data){
+  document.getElementById('playerScreen').style.display='none';
+  const container = document.getElementById('resultContainer');
+  container.innerHTML = `<h2 style="color:#ffeb3b;">${nick.toUpperCase()}</h2>`;
+  container.innerHTML += `<pre style="text-align:left;">${JSON.stringify(data, null, 2)}</pre>`;
+  document.getElementById('resultScreen').style.display='block';
+}
+
+document.getElementById('enterBtn').addEventListener('click', ()=>{
+  const barContainer = document.getElementById('loadingBarContainer');
+  const bar = document.getElementById('loadingBar');
+  barContainer.style.display='block';
+  let progress=0;
+  const interval = setInterval(()=>{
+    progress+=5;
+    if(progress>100) progress=100;
+    bar.style.width=progress+'%';
+    bar.textContent=progress+'%';
+    if(progress>=100){
+      clearInterval(interval);
+      document.getElementById('welcomeScreen').style.display='none';
+      document.getElementById('playerScreen').style.display='block';
+    }
+  },50);
+});
+
+document.getElementById('viewBtn').addEventListener('click', async ()=>{
+  const nick = document.getElementById('nickname').value.trim();
+  if(!nick) return alert('Digite o nickname!');
+  try{
+    const data = await fetchStats(nick);
+    displayStats(nick, data);
+  }catch(e){ alert('Erro: '+e.message); }
+});
+
+document.getElementById('backBtn').addEventListener('click', ()=>{
+  document.getElementById('resultScreen').style.display='none';
+  document.getElementById('playerScreen').style.display='block';
+});
+</script>
+
+</body>
+</html>
