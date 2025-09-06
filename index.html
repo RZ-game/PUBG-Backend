@@ -33,7 +33,26 @@ input[type=text], select {
 .button:hover { background: linear-gradient(45deg, #ffc107, #ffeb3b); box-shadow: 0 0 30px rgba(255,235,59,0.9);}
 .button:active { transform: translateY(2px); box-shadow: 0 0 15px rgba(255,235,59,0.6); }
 
+#seasonContainer { display: none; margin-top: 15px; }
+.season-select { width: 60%; padding: 10px; margin: 10px 0; border-radius: 8px; border: none; background-color: #121212; color: #fff; font-size: 14px; }
+
 #resultContainer { margin-top: 20px; text-align: center; }
+.mode-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px,1fr));
+  gap: 15px; justify-items: center;
+}
+.mode-card {
+  background-color: #1e1e1e; border: 2px solid #2c2c2c;
+  border-radius: 12px; padding: 15px; width: 100%;
+  opacity: 0; transform: translateY(15px); transition: all 0.5s;
+}
+.mode-card.show { opacity: 1; transform: translateY(0); }
+.mode-title { font-weight: bold; color: #ffc107; font-size: 16px; margin-bottom: 10px; }
+.summary {
+  background-color: #2c2c2c; padding: 15px; border-radius: 12px; margin-top: 20px;
+  text-align: center; font-size: 14px;
+}
 
 /* BARRA DE CARREGAMENTO */
 #loadingBarContainer {
@@ -63,6 +82,22 @@ input[type=text], select {
 <div class="container" id="playerScreen">
   <h1>🔍 Buscar Estatísticas</h1>
   <input type="text" id="nickname" placeholder="Digite seu Nickname">
+  <select id="platform">
+    <option value="steam">Steam</option>
+    <option value="xbox">Xbox</option>
+    <option value="psn">PSN</option>
+  </select>
+  <div style="margin-top:10px;">
+    <input type="radio" name="countType" id="lifetime" value="lifetime" checked>
+    <label class="label-radio" for="lifetime">Lifetime (Total)</label>
+    <input type="radio" name="countType" id="seasonal" value="seasonal">
+    <label class="label-radio" for="seasonal">Por Temporada</label>
+  </div>
+
+  <div id="seasonContainer">
+    <select id="seasonSelect" class="season-select"></select>
+  </div>
+
   <div class="button" id="viewBtn">Ver Estatísticas</div>
 </div>
 
@@ -73,22 +108,54 @@ input[type=text], select {
 </div>
 
 <script>
-const BACKEND_URL = "https://pubg-backend.onrender.com"; // Troque pela sua URL do Render
+const BACKEND_URL = "https://pubg-contador.onrender.com"; // URL do Render
 
-async function fetchStats(nick){
-  const res = await fetch(`${BACKEND_URL}/stats/${nick}`);
+async function fetchAPI(endpoint){
+  const res = await fetch(`${BACKEND_URL}${endpoint}`);
   if(!res.ok) throw new Error("Erro ao buscar dados");
   return res.json();
 }
 
-function displayStats(nick, data){
+// Busca temporadas via backend
+async function getSeasons(platform){
+  return await fetchAPI(`/seasons/${platform}`);
+}
+
+// Busca estatísticas via backend
+async function getStats(nick, platform, season="lifetime"){
+  return await fetchAPI(`/stats/${platform}/${nick}/${season}`);
+}
+
+function displayStats(nick, seasonName, stats){
   document.getElementById('playerScreen').style.display='none';
   const container = document.getElementById('resultContainer');
-  container.innerHTML = `<h2 style="color:#ffeb3b;">${nick.toUpperCase()}</h2>`;
-  container.innerHTML += `<pre style="text-align:left;">${JSON.stringify(data, null, 2)}</pre>`;
+  container.innerHTML = `<h2 style="color:#ffeb3b;">${nick.toUpperCase()} - ${seasonName}</h2>`;
+  const grid = document.createElement('div'); grid.className='mode-grid'; container.appendChild(grid);
+
+  let totalP=0,totalV=0,totalK=0,totalL=0,delay=0;
+  for(const modo in stats){
+    const val = stats[modo];
+    totalP+=val.partidas; totalV+=val.vitorias; totalK+=val.kills; totalL=Math.max(totalL,val.tiro_mais_longo);
+    const card = document.createElement('div'); card.className='mode-card';
+    card.innerHTML=`<div class="mode-title">${modo}</div>
+      <div>Partidas: ${val.partidas}</div>
+      <div style="color:#4caf50;">Vitórias: ${val.vitorias}</div>
+      <div style="color:#f44336;">Kills: ${val.kills}</div>
+      <div style="color:#03a9f4;">Tiro mais longo: ${val.tiro_mais_longo.toFixed(2)} m</div>`;
+    grid.appendChild(card);
+    setTimeout(()=>{ card.classList.add('show'); }, delay);
+    delay+=100;
+  }
+
+  const summary = document.createElement('div'); summary.className='summary';
+  summary.innerHTML=`<strong>Resumo Geral:</strong><br>
+    Total Partidas: ${totalP} | Total Vitórias: ${totalV} | Total Kills: ${totalK} | Tiro mais longo: ${totalL.toFixed(2)} m`;
+  container.appendChild(summary);
+
   document.getElementById('resultScreen').style.display='block';
 }
 
+// BOTÕES
 document.getElementById('enterBtn').addEventListener('click', ()=>{
   const barContainer = document.getElementById('loadingBarContainer');
   const bar = document.getElementById('loadingBar');
@@ -107,13 +174,44 @@ document.getElementById('enterBtn').addEventListener('click', ()=>{
   },50);
 });
 
+document.querySelectorAll('input[name="countType"]').forEach(radio=>{
+  radio.addEventListener('change', async ()=>{
+    const seasonContainer = document.getElementById('seasonContainer');
+    if(radio.value==='seasonal'){
+      seasonContainer.style.display='block';
+      const platform = document.getElementById('platform').value;
+      const seasons = await getSeasons(platform);
+      const seasonSelect = document.getElementById('seasonSelect');
+      seasonSelect.innerHTML='';
+      seasons.forEach(s=>{
+        const opt = document.createElement('option'); opt.value=s.id; opt.textContent=s.name;
+        seasonSelect.appendChild(opt);
+      });
+    } else {
+      seasonContainer.style.display='none';
+    }
+  });
+});
+
 document.getElementById('viewBtn').addEventListener('click', async ()=>{
   const nick = document.getElementById('nickname').value.trim();
+  const platform = document.getElementById('platform').value;
   if(!nick) return alert('Digite o nickname!');
+  const countType = document.querySelector('input[name="countType"]:checked').value;
+
   try{
-    const data = await fetchStats(nick);
-    displayStats(nick, data);
-  }catch(e){ alert('Erro: '+e.message); }
+    if(countType==='lifetime'){
+      const stats = await getStats(nick, platform, 'lifetime');
+      displayStats(nick,'Lifetime',stats);
+    } else {
+      const seasonSelect = document.getElementById('seasonSelect');
+      if(seasonSelect.options.length===0) return alert('Nenhuma temporada disponível');
+      const seasonId = seasonSelect.value;
+      const seasonName = seasonSelect.selectedOptions[0].textContent;
+      const stats = await getStats(nick, platform, seasonId);
+      displayStats(nick, seasonName, stats);
+    }
+  } catch(e){ alert('Erro: '+e.message); }
 });
 
 document.getElementById('backBtn').addEventListener('click', ()=>{
